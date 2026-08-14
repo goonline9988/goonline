@@ -1,169 +1,122 @@
-import { PlusIcon, SquarePenIcon, XIcon } from 'lucide-react';
-import React, { useState } from 'react'
-import AddressModal from './AddressModal';
-import { useDispatch, useSelector } from 'react-redux';
-import toast from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
-import {Protect, useAuth, useUser} from '@clerk/nextjs'
-import axios from 'axios';
-import { fetchCart } from '@/lib/features/cart/cartSlice';
+'use client'
+import { useState } from 'react'
+import { Trash2, MessageCircle } from 'lucide-react'
+import { useDispatch, useSelector } from 'react-redux'
+import { removeLine, updateQty, clearStoreCart } from '@/lib/features/cart/cartSlice'
+import { buildWaLink } from '@/lib/whatsapp'
+import axios from 'axios'
+import toast from 'react-hot-toast'
 
-const OrderSummary = ({ totalPrice, items }) => {
-
-    const {user} = useUser()
-    const { getToken } = useAuth()
+export default function OrderSummary({ store }) {
     const dispatch = useDispatch()
-    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$';
+    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹'
 
-    const router = useRouter();
+    const items = useSelector(s => s.cart.cartByStore?.[store.id]?.items) || []
+    const total = items.reduce((acc, it) => acc + it.price * it.qty, 0)
+    const [submitting, setSubmitting] = useState(false)
 
-    const addressList = useSelector(state => state.address.list);
-
-    const [paymentMethod, setPaymentMethod] = useState('COD');
-    const [selectedAddress, setSelectedAddress] = useState(null);
-    const [showAddressModal, setShowAddressModal] = useState(false);
-    const [couponCodeInput, setCouponCodeInput] = useState('');
-    const [coupon, setCoupon] = useState('');
-
-    const handleCouponCode = async (event) => {
-        event.preventDefault();
-        try {
-            if(!user){
-                return toast('Please login to proceed')
-            }
-            const token = await getToken();
-            const { data } = await axios.post('/api/coupon', {code: couponCodeInput}, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
-            setCoupon(data.coupon)
-            toast.success('Coupon Applied')
-        } catch (error) {
-            toast.error(error?.response?.data?.error || error.message)
-        }
-        
+    const buildMessage = () => {
+        const lines = []
+        lines.push(`Hello ${store.name},`)
+        lines.push('')
+        lines.push(`I'd like to order:`)
+        items.forEach((it, i) => {
+            const tags = []
+            if (it.size) tags.push(`Size: ${it.size}`)
+            if (it.color) tags.push(`Color: ${it.color}`)
+            const tagStr = tags.length ? ` | ${tags.join(' | ')}` : ''
+            lines.push(`${i + 1}. ${it.name}${tagStr} | Qty: ${it.qty} | ${currency}${it.price}`)
+        })
+        lines.push('')
+        lines.push(`Total: ${currency}${total.toFixed(2)}`)
+        lines.push('')
+        lines.push(`Store: ${store.name} (/${store.username})`)
+        return lines.join('\n')
     }
 
-    const handlePlaceOrder = async (e) => {
-        e.preventDefault();
-        try {
-            if(!user){
-                return toast('Please login to place an order')
-            }
-            if(!selectedAddress){
-                return toast('Please select an address')
-            }
-            const token = await getToken();
-
-            const orderData = {
-                addressId: selectedAddress.id,
-                items,
-                paymentMethod
-            }
-
-            if(coupon){
-                orderData.couponCode = coupon.code
-            }
-           // create order
-           const {data} = await axios.post('/api/orders', orderData, {
-            headers: { Authorization: `Bearer ${token}` }
-           })
-
-           if(paymentMethod === 'STRIPE'){
-            window.location.href = data.session.url;
-           }else{
-            toast.success(data.message)
-            router.push('/orders')
-            dispatch(fetchCart({getToken}))
-           }
-
-        } catch (error) {
-            toast.error(error?.response?.data?.error || error.message)
+    const onOrder = async () => {
+        if (!store.whatsapp) {
+            return toast.error('This store has not set a WhatsApp number yet')
         }
+        try {
+            setSubmitting(true)
+            await axios.post('/api/orders', {
+                items: items.map(it => ({
+                    id: it.productId,
+                    quantity: it.qty,
+                    size: it.size,
+                    color: it.color,
+                })),
+            })
+        } catch (e) {
+            console.warn('Order log failed:', e?.response?.data || e.message)
+        } finally {
+            setSubmitting(false)
+        }
+        window.open(buildWaLink(store.whatsapp, buildMessage()), '_blank')
+        dispatch(clearStoreCart({ storeId: store.id }))
+    }
 
-        
+    if (items.length === 0) {
+        return (
+            <div className="w-full lg:max-w-sm bg-white border border-slate-200 rounded-2xl p-6 text-center">
+                <p className="text-slate-500">Your cart is empty.</p>
+            </div>
+        )
     }
 
     return (
-        <div className='w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7'>
-            <h2 className='text-xl font-medium text-slate-600'>Payment Summary</h2>
-            <p className='text-slate-400 text-xs my-4'>Payment Method</p>
-            <div className='flex gap-2 items-center'>
-                <input type="radio" id="COD" onChange={() => setPaymentMethod('COD')} checked={paymentMethod === 'COD'} className='accent-gray-500' />
-                <label htmlFor="COD" className='cursor-pointer'>COD</label>
-            </div>
-            <div className='flex gap-2 items-center mt-1'>
-                <input type="radio" id="STRIPE" name='payment' onChange={() => setPaymentMethod('STRIPE')} checked={paymentMethod === 'STRIPE'} className='accent-gray-500' />
-                <label htmlFor="STRIPE" className='cursor-pointer'>Stripe Payment</label>
-            </div>
-            <div className='my-4 py-4 border-y border-slate-200 text-slate-400'>
-                <p>Address</p>
-                {
-                    selectedAddress ? (
-                        <div className='flex gap-2 items-center'>
-                            <p>{selectedAddress.name}, {selectedAddress.city}, {selectedAddress.state}, {selectedAddress.zip}</p>
-                            <SquarePenIcon onClick={() => setSelectedAddress(null)} className='cursor-pointer' size={18} />
-                        </div>
-                    ) : (
-                        <div>
-                            {
-                                addressList.length > 0 && (
-                                    <select className='border border-slate-400 p-2 w-full my-3 outline-none rounded' onChange={(e) => setSelectedAddress(addressList[e.target.value])} >
-                                        <option value="">Select Address</option>
-                                        {
-                                            addressList.map((address, index) => (
-                                                <option key={index} value={index}>{address.name}, {address.city}, {address.state}, {address.zip}</option>
-                                            ))
-                                        }
-                                    </select>
-                                )
-                            }
-                            <button className='flex items-center gap-1 text-slate-600 mt-1' onClick={() => setShowAddressModal(true)} >Add Address <PlusIcon size={18} /></button>
-                        </div>
-                    )
-                }
-            </div>
-            <div className='pb-4 border-b border-slate-200'>
-                <div className='flex justify-between'>
-                    <div className='flex flex-col gap-1 text-slate-400'>
-                        <p>Subtotal:</p>
-                        <p>Shipping:</p>
-                        {coupon && <p>Coupon:</p>}
-                    </div>
-                    <div className='flex flex-col gap-1 font-medium text-right'>
-                        <p>{currency}{totalPrice.toLocaleString()}</p>
-                        <p><Protect plan={'plus'} fallback={`${currency}5`}>Free</Protect></p>
-                        {coupon && <p>{`-${currency}${(coupon.discount / 100 * totalPrice).toFixed(2)}`}</p>}
-                    </div>
-                </div>
-                {
-                    !coupon ? (
-                        <form onSubmit={e => toast.promise(handleCouponCode(e), { loading: 'Checking Coupon...' })} className='flex justify-center gap-3 mt-3'>
-                            <input onChange={(e) => setCouponCodeInput(e.target.value)} value={couponCodeInput} type="text" placeholder='Coupon Code' className='border border-slate-400 p-1.5 rounded w-full outline-none' />
-                            <button className='bg-slate-600 text-white px-3 rounded hover:bg-slate-800 active:scale-95 transition-all'>Apply</button>
-                        </form>
-                    ) : (
-                        <div className='w-full flex items-center justify-center gap-2 text-xs mt-2'>
-                            <p>Code: <span className='font-semibold ml-1'>{coupon.code.toUpperCase()}</span></p>
-                            <p>{coupon.description}</p>
-                            <XIcon size={18} onClick={() => setCoupon('')} className='hover:text-red-700 transition cursor-pointer' />
-                        </div>
-                    )
-                }
-            </div>
-            <div className='flex justify-between py-4'>
-                <p>Total:</p>
-                <p className='font-medium text-right'>
-                    <Protect plan={'plus'} fallback={`${currency}${coupon ? (totalPrice + 5 - (coupon.discount / 100 * totalPrice)).toFixed(2) : (totalPrice + 5).toLocaleString()}`}>  
-                    {currency}{coupon ? (totalPrice - (coupon.discount / 100 * totalPrice)).toFixed(2) : totalPrice.toLocaleString()}
-                    </Protect>
-                    </p>
-            </div>
-            <button onClick={e => toast.promise(handlePlaceOrder(e), { loading: 'placing Order...' })} className='w-full bg-slate-700 text-white py-2.5 rounded hover:bg-slate-900 active:scale-95 transition-all'>Place Order</button>
+        <div className="w-full lg:max-w-sm bg-white border border-slate-200 rounded-2xl p-6 text-slate-700">
+            <h2 className="text-lg font-semibold text-slate-800">Your order</h2>
+            <p className="text-xs text-slate-400 mt-1">At {store.name}</p>
 
-            {showAddressModal && <AddressModal setShowAddressModal={setShowAddressModal} />}
+            <ul className="mt-5 space-y-3 max-h-80 overflow-auto pr-1">
+                {items.map((it, i) => (
+                    <li key={i} className="flex gap-3 items-center border border-slate-100 rounded-xl p-2">
+                        <div className="size-14 rounded-lg bg-slate-50 overflow-hidden flex items-center justify-center">
+                            {it.image && <img src={it.image} alt="" className="w-full h-full object-cover" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{it.name}</p>
+                            <p className="text-xs text-slate-500">
+                                {it.size ? `Size ${it.size}` : ''}{it.size && it.color ? ' · ' : ''}{it.color ? `Color ${it.color}` : ''}
+                            </p>
+                            <div className="flex items-center justify-between mt-1">
+                                <div className="inline-flex items-center rounded-full border border-slate-200 overflow-hidden text-xs">
+                                    <button onClick={() => dispatch(updateQty({ storeId: store.id, index: i, qty: it.qty - 1 }))} className="px-2 py-0.5 text-slate-600">-</button>
+                                    <span className="px-2">{it.qty}</span>
+                                    <button onClick={() => dispatch(updateQty({ storeId: store.id, index: i, qty: it.qty + 1 }))} className="px-2 py-0.5 text-slate-600">+</button>
+                                </div>
+                                <p className="text-sm font-medium">{currency}{(it.price * it.qty).toFixed(2)}</p>
+                            </div>
+                        </div>
+                        <button onClick={() => dispatch(removeLine({ storeId: store.id, index: i }))} className="text-slate-400 hover:text-red-500 p-1.5" aria-label="Remove">
+                            <Trash2 size={14} />
+                        </button>
+                    </li>
+                ))}
+            </ul>
 
+            <div className="mt-5 border-t border-slate-100 pt-4 flex justify-between text-sm">
+                <span className="text-slate-500">Total</span>
+                <span className="font-semibold text-slate-900">{currency}{total.toFixed(2)}</span>
+            </div>
+
+            <button
+                onClick={onOrder}
+                disabled={submitting}
+                className="mt-5 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full text-white text-sm font-medium shadow-sm hover:opacity-90 disabled:opacity-60"
+                style={{ backgroundColor: store.brandColor || '#10b981' }}
+            >
+                <MessageCircle size={16} /> {submitting ? 'Opening WhatsApp…' : 'Order on WhatsApp'}
+            </button>
+
+            <button
+                onClick={() => dispatch(clearStoreCart({ storeId: store.id }))}
+                className="mt-2 w-full text-xs text-slate-400 hover:text-red-500"
+            >
+                Clear cart
+            </button>
         </div>
     )
 }
-
-export default OrderSummary

@@ -17,6 +17,9 @@ export async function POST(request){
         const contact = formData.get("contact")
         const address = formData.get("address")
         const image = formData.get("image")
+        const whatsapp = formData.get("whatsapp")
+        const brandColor = formData.get("brandColor")
+        const banner = formData.get("banner")
 
         if(!name || !username || !description || !email || !contact || !address || !image){
             return NextResponse.json({error: "missing store info"}, {status: 400})
@@ -58,6 +61,20 @@ export async function POST(request){
             ]
         })
 
+        let bannerUrl = null
+        if (banner && typeof banner === 'object') {
+            const bbuf = Buffer.from(await banner.arrayBuffer())
+            const bu = await imagekit.upload({ file: bbuf, fileName: banner.name, folder: 'banners' })
+            bannerUrl = imagekit.url({
+                path: bu.filePath,
+                transformation: [
+                    { quality: 'auto' },
+                    { format: 'webp' },
+                    { width: '1280' },
+                ],
+            })
+        }
+
         const newStore = await prisma.store.create({
             data: {
                 userId,
@@ -67,6 +84,9 @@ export async function POST(request){
                 email,
                 contact,
                 address,
+                whatsapp: whatsapp || null,
+                brandColor: brandColor || null,
+                banner: bannerUrl,
                 logo: optimizedImage
             }
         })

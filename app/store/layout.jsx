@@ -1,6 +1,8 @@
 import StoreLayout from "@/components/store/StoreLayout";
 import {SignedIn, SignedOut, SignIn} from "@clerk/nextjs"
 
+export const dynamic = 'force-dynamic'
+
 export const metadata = {
     title: "GoCart. - Store Dashboard",
     description: "GoCart. - Store Dashboard",

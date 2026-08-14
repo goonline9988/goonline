@@ -319,7 +319,6 @@ export const dummyUserData = {
     name: "GreatStack",
     email: "greatstack@example.com",
     image: gs_logo,
-    cart: {}
 }
 
 export const storesDummyData = [

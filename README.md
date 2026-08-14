@@ -1,48 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# GoCart. — Multi-tenant Storefronts with WhatsApp Ordering
 
-## Getting Started
+A white-label, multi-vendor e-commerce platform where every vendor has what feels like their own standalone e-commerce website. All purchases are handled through **WhatsApp** instead of online payments.
 
-First, install the dependencies:
+## Principles
+- **No payment system.** No Buy Now, no payment gateway, no checkout payment flow. Customers add to cart, then click **Order on WhatsApp** to open a prefilled chat with that vendor.
+- **Strict store isolation.** Each `/<slug>` storefront shows only that vendor's products, branding, and WhatsApp number.
+- **White-label feel.** Each store has its own navbar, banner, logo, brand color, and WhatsApp CTA — not a shared marketplace chrome.
+- **Per-store cart.** One WhatsApp order per vendor; no cross-vendor cart.
+
+## Stack
+Next.js 16 (App Router) · Prisma 6 (Neon Postgres) · Clerk · ImageKit · Inngest · OpenAI · Redux Toolkit · `qrcode.react`.
+
+## Getting started
 
 ```bash
 npm install
-# or
-yarn install
-# or
-pnpm install
-# or
-bun install
-```
-
-Then, run the development server:
-
-```bash
+cp .env.example .env   # fill in Clerk, Neon, ImageKit, OpenAI, etc.
+npx prisma migrate dev
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The home page lists all live stores. Each store lives at `/<slug>`.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Key flows
+1. **Vendor** signs in, applies to open a store at `/create-store`, uploads logo / WhatsApp / brand color.
+2. **Admin** approves the store at `/admin/approve`.
+3. **Vendor** adds products (with optional sizes / colors) at `/store/add-product` and edits them at `/store/manage-product`.
+4. **Customer** visits `/<slug>`, browses, adds items to the per-store cart, and clicks **Order on WhatsApp** at `/<slug>/cart` — a wa.me link opens with a prefilled order message containing the items, size, color, quantity, and total.
+5. The same click also creates an in-app order log (`status=ORDER_PLACED`) that the vendor can update at `/store/orders` (PROCESSING → SHIPPED → DELIVERED).
+6. Vendor gets a **QR code** at `/store/qr` that encodes their storefront URL.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## What's gone vs. the original GoCart
+- No Stripe, no PaymentMethod enum, no `isPaid` flag.
+- No coupons, no `Coupon` model, no `/admin/coupons`, no banner promo.
+- No shipping address collection; orders are conversations on WhatsApp.
+- No global cart; cart is per-store and lives in the browser (`localStorage`).
+- `/shop` and `/product/:id` are replaced by `/<slug>` and `/<slug>/product/:id`.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project structure (highlights)
+- `app/(public)/[username]/...` — vendor storefront (home, product, cart)
+- `app/store/...` — vendor dashboard (products, orders, QR, settings)
+- `app/admin/...` — admin dashboard (approve stores, suspend/delete, products, categories)
+- `app/api/orders` — logs WhatsApp orders
+- `lib/whatsapp.js` — wa.me link + phone number sanitizer
+- `lib/features/cart/cartSlice.js` — per-store cart, persisted in `localStorage`
+- `prisma/schema.prisma` — see models `Store`, `Product`, `Order`, `OrderItem`, `Category`

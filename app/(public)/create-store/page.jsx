@@ -26,7 +26,9 @@ export default function CreateStore() {
         email: "",
         contact: "",
         address: "",
-        image: ""
+        image: "",
+        whatsapp: "",
+        brandColor: "#10b981",
     })
 
     const onChangeHandler = (e) => {
@@ -79,6 +81,8 @@ export default function CreateStore() {
             formData.append("contact", storeInfo.contact)
             formData.append("address", storeInfo.address)
             formData.append("image", storeInfo.image)
+            formData.append("whatsapp", storeInfo.whatsapp)
+            formData.append("brandColor", storeInfo.brandColor)
 
             const { data } = await axios.post('/api/store/create', formData, {headers: {Authorization: `Bearer ${token}`}})
             toast.success(data.message)
@@ -134,6 +138,15 @@ export default function CreateStore() {
 
                         <p>Contact Number</p>
                         <input name="contact" onChange={onChangeHandler} value={storeInfo.contact} type="text" placeholder="Enter your store contact number" className="border border-slate-300 outline-slate-400 w-full max-w-lg p-2 rounded" />
+
+                        <p>WhatsApp Number <span className="text-xs text-slate-400">(used for &quot;Order on WhatsApp&quot; deep links)</span></p>
+                        <input name="whatsapp" onChange={onChangeHandler} value={storeInfo.whatsapp} type="text" placeholder="e.g. +1 555 123 4567" className="border border-slate-300 outline-slate-400 w-full max-w-lg p-2 rounded" />
+
+                        <p>Brand color</p>
+                        <div className="flex items-center gap-3">
+                            <input name="brandColor" type="color" value={storeInfo.brandColor} onChange={onChangeHandler} className="h-10 w-14 rounded border border-slate-300" />
+                            <input name="brandColor" type="text" value={storeInfo.brandColor} onChange={onChangeHandler} className="border border-slate-300 outline-slate-400 w-full max-w-lg p-2 rounded font-mono text-sm" />
+                        </div>
 
                         <p>Address</p>
                         <textarea name="address" onChange={onChangeHandler} value={storeInfo.address} rows={5} placeholder="Enter your store address" className="border border-slate-300 outline-slate-400 w-full max-w-lg p-2 rounded resize-none" />

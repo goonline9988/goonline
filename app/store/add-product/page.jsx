@@ -3,12 +3,13 @@ import { assets } from "@/assets/assets"
 import { useAuth } from "@clerk/nextjs"
 import axios from "axios"
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "react-hot-toast"
+import { Plus, X } from "lucide-react"
 
 export default function StoreAddProduct() {
 
-    const categories = ['Electronics', 'Clothing', 'Home & Kitchen', 'Beauty & Health', 'Toys & Games', 'Sports & Outdoors', 'Books & Media', 'Food & Drink', 'Hobbies & Crafts', 'Others']
+    const [categories, setCategories] = useState([])
 
     const [images, setImages] = useState({ 1: null, 2: null, 3: null, 4: null })
     const [productInfo, setProductInfo] = useState({
@@ -18,10 +19,18 @@ export default function StoreAddProduct() {
         price: 0,
         category: "",
     })
+    const [sizesText, setSizesText] = useState('')
+    const [colorsText, setColorsText] = useState('')
     const [loading, setLoading] = useState(false)
     const [aiUsed, setAiUsed] = useState(false)
 
     const { getToken } = useAuth()
+
+    useEffect(() => {
+        axios.get('/api/categories')
+            .then(r => setCategories(r.data.categories || []))
+            .catch(() => { })
+    }, [])
 
     const onChangeHandler = (e) => {
         setProductInfo({ ...productInfo, [e.target.name]: e.target.value })
@@ -48,8 +57,6 @@ export default function StoreAddProduct() {
                         {
                             loading: "Analyzing image with AI...",
                             success: (res) => {
-                                console.log(res);
-                                
                                 const data = res.data
                                 if (data.name && data.description) {
                                     setProductInfo(prev => ({
@@ -58,12 +65,11 @@ export default function StoreAddProduct() {
                                         description: data.description
                                     }))
                                     setAiUsed(true)
-                                    return "AI filled product info 🎉"
+                                    return "AI filled product info"
                                 }
                                 return "AI could not analyze the image"
                             },
-                            error: (err) =>
-                                err?.response?.data?.error || err.message
+                            error: (err) => err?.response?.data?.error || err.message
                         }
                     )
                 } catch (error) {
@@ -87,6 +93,8 @@ export default function StoreAddProduct() {
             formData.append('mrp', productInfo.mrp)
             formData.append('price', productInfo.price)
             formData.append('category', productInfo.category)
+            formData.append('sizes', sizesText)
+            formData.append('colors', colorsText)
 
             Object.keys(images).forEach((key) => {
                 images[key] && formData.append('images', images[key])
@@ -98,6 +106,8 @@ export default function StoreAddProduct() {
 
             setProductInfo({ name: "", description: "", mrp: 0, price: 0, category: "" })
             setImages({ 1: null, 2: null, 3: null, 4: null })
+            setSizesText('')
+            setColorsText('')
             setAiUsed(false)
         } catch (error) {
             toast.error(error?.response?.data?.error || error.message)
@@ -153,11 +163,23 @@ export default function StoreAddProduct() {
                 </label>
             </div>
 
+            <div className="grid sm:grid-cols-2 gap-4 my-6 max-w-2xl">
+                <label className="flex flex-col gap-2">
+                    Sizes <span className="text-xs text-slate-400">(comma-separated, e.g. S, M, L)</span>
+                    <input value={sizesText} onChange={(e) => setSizesText(e.target.value)} type="text" placeholder="S, M, L, XL" className="w-full p-2 px-4 outline-none border border-slate-200 rounded" />
+                </label>
+                <label className="flex flex-col gap-2">
+                    Colors <span className="text-xs text-slate-400">(comma-separated)</span>
+                    <input value={colorsText} onChange={(e) => setColorsText(e.target.value)} type="text" placeholder="Red, Black, Blue" className="w-full p-2 px-4 outline-none border border-slate-200 rounded" />
+                </label>
+            </div>
+
             <select onChange={e => setProductInfo({ ...productInfo, category: e.target.value })} value={productInfo.category} className="w-full max-w-sm p-2 px-4 my-6 outline-none border border-slate-200 rounded" required>
                 <option value="">Select a category</option>
                 {categories.map((category) => (
-                    <option key={category} value={category}>{category}</option>
+                    <option key={category.id} value={category.name}>{category.name}</option>
                 ))}
+                {categories.length === 0 && <option value="" disabled>No categories — add some in /admin/categories</option>}
             </select>
 
             <br />
